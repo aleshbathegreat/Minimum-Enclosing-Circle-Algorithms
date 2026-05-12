@@ -1,0 +1,8 @@
+To run these tests:
+1. Make sure you have all required libraries installed:
+   pip install numpy matplotlib matplotlib-venn
+2. Run the tests using:
+
+   python tests.py
+
+

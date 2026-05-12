@@ -1,0 +1,6 @@
+cvxpy
+numpy
+matplotlib
+matplotlib-venn
+numba
+syse
