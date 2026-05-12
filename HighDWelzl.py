@@ -282,8 +282,7 @@ def _msw_iterative(points, dim):
 
 
 
-def minimum_enclosing_ball(points, dim=None, method="auto"):
-    
+def minimum_enclosing_ball(points, dim=None):
     pts = list(set(points))
     n = len(pts)
 
@@ -297,25 +296,13 @@ def minimum_enclosing_ball(points, dim=None, method="auto"):
     if n <= dim + 1:
         return make_ball(pts)
 
-    if method == "auto":
-        method = "recursive" if n <= 500 else "iterative"
-
-    if method == "recursive":
-        random.shuffle(pts)
-        basis = _msw_recursive(pts, [], dim)
-        center, radius = make_ball(basis)
-        # One safety pass for floating-point edge cases
-        for p in pts:
-            if not point_in_ball(p, center, radius):
-                radius = dist(center, p)
-        return center, radius
-    else:
-        return _msw_iterative(pts, dim)
+    # Always use the JIT-compiled iterative path (no recursive)
+    return _msw_iterative(pts, dim)
 
 
 # Backward-compatible wrapper for 2-D callers
-def minimum_enclosing_circle(points, method="auto"):
-    return minimum_enclosing_ball(points, dim=2, method=method)
+def minimum_enclosing_circle(points):
+    return minimum_enclosing_ball(points, dim=2)
 
 
 

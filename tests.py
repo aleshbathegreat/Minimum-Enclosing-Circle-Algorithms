@@ -22,7 +22,7 @@ import matplotlib.patches as mpatches
 sys.setrecursionlimit(10_000_000)
 from welzl_mec  import minimum_enclosing_circle, is_inside
 from approx     import meb_approximation
-from skynum     import skyum_algo
+from skyum     import skyum_algo
 from HighDWelzl import minimum_enclosing_ball  as msw_minimum_enclosing_ball
 from HighDWelzl import minimum_enclosing_circle as msw_minimum_enclosing_circle
 
@@ -54,7 +54,7 @@ CFG = dict(
     APPROX_N_REPEATS = 3,
 
     # --- timing: Approx vs dimension ---
-    APPROX_DIM_DIMS    = [2, 5, 10, 20, 50, 100, 200, 500, 1000],
+    APPROX_DIM_DIMS    = [2, 5, 10, 20, 50, 100, 200],
     APPROX_DIM_N       = 100,   # fixed n for the dimension-scaling run
     APPROX_DIM_EPS     = 0.01,
     APPROX_DIM_REPEATS = 3,
@@ -69,8 +69,12 @@ CFG = dict(
     CMP_EPS     = 0.01,
     CMP_REPEATS = 3,
 
+    # --- timing: MSW vs n (2-D) ---
+    MSW_SIZES   = [10, 50, 100, 250, 500, 750, 1000, 2000, 10000, 100000],
+    MSW_REPEATS = 5,
+
     # --- MSW vs Approx across dimensions ---
-    MSW_DIM_DIMS    = [2, 3, 5, 50, 200],
+    MSW_DIM_DIMS    = [2, 3, 5, 10, 20],
     MSW_DIM_N       = 100,   # fixed n for dimension scaling
     MSW_DIM_EPS     = 0.01,
     MSW_DIM_REPEATS = 3,
@@ -635,6 +639,43 @@ def bench_approx_vs_eps():
     print(f"  Saved {out}")
     return epsilons, times, coresizes
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 8.3 TIMING — MSW vs n  (2-D)
+# ─────────────────────────────────────────────────────────────────────────────
+def bench_msw_vs_n():
+    _section('Timing: MSW vs n  (2-D, JIT iterative)')
+    sizes   = CFG['MSW_SIZES']
+    repeats = CFG['MSW_REPEATS']
+    times   = []
+
+    for n in sizes:
+        t_total = 0
+        for _ in range(repeats):
+            random.seed(random.randint(0, 10**6))
+            pts = [(random.uniform(-100, 100), random.uniform(-100, 100)) for _ in range(n)]
+            t0  = time.perf_counter()
+            msw_minimum_enclosing_ball(pts, dim=2)
+            t_total += time.perf_counter() - t0
+        avg = t_total / repeats
+        times.append(avg)
+        print(f'    n={n:5d}  avg={avg*1000:.3f} ms')
+
+    fig, ax = plt.subplots(figsize=(9, 5))
+    _style(fig, [ax])
+    ax.plot(sizes, [t*1000 for t in times], color=GOLD, lw=2.5, marker='o',
+            markersize=6, markerfacecolor=DARK)
+    ax.fill_between(sizes, [t*1000 for t in times], alpha=0.12, color=GOLD)
+    ax.set_xlabel('Number of Points (n)')
+    ax.set_ylabel('Time (ms)')
+    ax.set_title('MSW (HighDWelzl) -- Runtime vs n  (2-D)')
+    plt.tight_layout()
+    out = f'{IMG}/msw_timing_vs_n.png'
+    plt.savefig(out, dpi=150, bbox_inches='tight')
+    plt.close()
+    print(f'  Saved {out}')
+    return sizes, times
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 8.5 TIMING — MSW vs Approx across dimensions
 # ─────────────────────────────────────────────────────────────────────────────
@@ -704,7 +745,7 @@ def bench_comparison():
             t0 = time.perf_counter(); minimum_enclosing_circle(pts_list);                               tw += time.perf_counter()-t0
             t0 = time.perf_counter(); meb_approximation(pts_np, EPS);                                  ta += time.perf_counter()-t0
             t0 = time.perf_counter(); skyum_algo(pts_list);                                            ts += time.perf_counter()-t0
-            t0 = time.perf_counter(); msw_minimum_enclosing_ball(pts_list, dim=2, method="iterative"); tm += time.perf_counter()-t0
+            t0 = time.perf_counter(); msw_minimum_enclosing_ball(pts_list, dim=2); tm += time.perf_counter()-t0
 
         t_welzl.append(tw/repeats); t_approx.append(ta/repeats)
         t_skyum.append(ts/repeats); t_msw.append(tm/repeats)
@@ -760,6 +801,7 @@ if __name__ == "__main__":
     bench_approx_vs_n()
     bench_approx_vs_dim()
     bench_approx_vs_eps()
+    bench_msw_vs_n()
     bench_msw_vs_approx_dim()
     bench_comparison()
     print_summary()
