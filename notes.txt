@@ -5,4 +5,16 @@ To run these tests:
 
    python tests.py
 
+Here are some interesting observations:
+1. While the approximate algorithm has a higher overhead cost because of cvxpy
+and is way slower for smaller n than all the algorithms, for larger n, it scales
+really well. for n = 1 million, it was approximately 10x faster than Skyum
+2. Theoretically Welzl should be the fastest algorithm here but in practice skyum 
+performs better despite having an o(nlogn) time complexity. this is because 
+the constant factors for welzl are much higher than that of skyum. and sorting in skyum
+is a very fast operation.
+
+3. The approximate algorithm has a fairly high time complexity of O(nd/epsilon) but since
+the factor of n comes from distance calculation, it is the fastest in practice for really high n.
+also it almost never reaches the worst case time complexity.
 
