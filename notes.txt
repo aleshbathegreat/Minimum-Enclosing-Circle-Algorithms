@@ -18,3 +18,5 @@ is a very fast operation.
 the factor of n comes from distance calculation, it is the fastest in practice for really high n.
 also it almost never reaches the worst case time complexity.
 
+4. new: MSW or HighDwelzl implemented by Shahzaib is a bit faster in practice than Hamnas algo. It is similar to welzl but
+can also be applied to higher dimensions. however it is not as good as approx for higher dimensions. 
