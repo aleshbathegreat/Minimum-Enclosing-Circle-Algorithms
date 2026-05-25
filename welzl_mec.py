@@ -97,14 +97,17 @@ def plot_circle(points, center, radius):
     padding = radius * 0.3 + 1
     ax.set_xlim(center[0] - radius - padding, center[0] + radius + padding)
     ax.set_ylim(center[1] - radius - padding, center[1] + radius + padding)
-    plt.show()
-
+    import os
+    os.makedirs("images", exist_ok=True)
+    plt.savefig("images/welzl_average_case.png", dpi=150, bbox_inches='tight')
+    plt.close()
+    print("Saved images/welzl_average_case.png")
 
 if __name__ == "__main__":
+    np.random.seed(42)
     number_of_points = 100
 
-    points = [(random.randint(0, 1000), random.randint(0, 1000))
-              for _ in range(number_of_points)]
+    points = np.random.randn(number_of_points, 2) * 20
 
     start = time.perf_counter()
     center, radius = minimum_enclosing_circle(points)

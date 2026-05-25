@@ -25,6 +25,8 @@ from approx     import meb_approximation
 from skyum     import skyum_algo
 from HighDWelzl import minimum_enclosing_ball  as msw_minimum_enclosing_ball
 from HighDWelzl import minimum_enclosing_circle as msw_minimum_enclosing_circle
+from megiddo import solve_mec_megiddo, _brute_force_mec
+import tracemalloc
 
 warnings.filterwarnings("ignore")   # suppress CVXPY verbosity
 
@@ -41,15 +43,19 @@ CFG = dict(
     EPS_SWEEP     = [0.1, 0.05, 0.01],   # eps values tested in the sweep
 
     # --- timing: Welzl vs n ---
-    WELZL_SIZES   = [10, 50, 100, 250, 500, 750, 1000, 1500, 2000, 100000],
+    WELZL_SIZES   = [0, 1, 100, 1000, 10000, 100000],
     WELZL_REPEATS = 5,
 
     # --- timing: Skyum vs n ---
-    SKYUM_SIZES   = [10, 50, 100, 250, 500, 750, 1000, 1500, 2000, 100000],
+    SKYUM_SIZES   = [0, 1, 100, 1000, 10000, 100000],
     SKYUM_REPEATS = 5,
 
+    # --- timing: Megiddo vs n ---
+    MEGIDDO_SIZES   = [0, 1, 100, 1000, 10000, 100000],
+    MEGIDDO_REPEATS = 5,
+
     # --- timing: Approx vs n ---
-    APPROX_N_SIZES   = [10, 30, 60, 100, 200, 400, 700, 1000, 100000],
+    APPROX_N_SIZES   = [0, 1, 100, 1000, 10000, 100000],
     APPROX_N_EPS     = 0.01,  # fixed eps for the n-scaling run
     APPROX_N_REPEATS = 3,
 
@@ -65,12 +71,12 @@ CFG = dict(
     APPROX_EPS_REPEATS = 3,
 
     # --- comparison Welzl vs Approx ---
-    CMP_SIZES   = [10, 50, 100, 250, 500, 750, 1000],
+    CMP_SIZES   = [0, 1, 100, 1000, 10000, 100000],
     CMP_EPS     = 0.01,
     CMP_REPEATS = 3,
 
     # --- timing: MSW vs n (2-D) ---
-    MSW_SIZES   = [10, 50, 100, 250, 500, 750, 1000, 2000, 10000, 100000],
+    MSW_SIZES   = [0, 1, 100, 1000, 10000, 100000],
     MSW_REPEATS = 5,
 
     # --- MSW vs Approx across dimensions ---
@@ -259,6 +265,59 @@ def test_skyum_correctness():
     _check("500 random pts → all inside", _all_inside_skyum(pts, center, radius))
 
 # ─────────────────────────────────────────────────────────────────────────────
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 1.6 CORRECTNESS – MEGIDDO
+# ─────────────────────────────────────────────────────────────────────────────
+def test_megiddo_correctness():
+    _section("MEGIDDO — Correctness & Edge Cases")
+
+    # 1 point
+    p = (3.0, 7.0)
+    c_x, c_y, radius = solve_mec_megiddo([p])
+    center = (c_x, c_y)
+    _check("1 point → center==point, radius 0",
+           np.allclose(center, p) and radius == 0, f"c={center}, r={radius}")
+
+    # 2 points
+    a, b = (0.0, 0.0), (4.0, 0.0)
+    c_x, c_y, radius = solve_mec_megiddo([a, b])
+    center = (c_x, c_y)
+    _check("2 points → midpoint center",
+           abs(center[0]-2) < 1e-9 and abs(center[1]) < 1e-9, str(center))
+    _check("2 points → radius = half-distance", abs(radius - 2.0) < 1e-9, f"r={radius:.6f}")
+
+    # 3 collinear points
+    pts = [(0,0),(1,0),(2,0)]
+    c_x, c_y, radius = solve_mec_megiddo(pts)
+    center = (c_x, c_y)
+    _check("3 collinear → all inside", _all_inside_skyum(pts, center, radius), f"c={center}, r={radius}")
+    _check("3 collinear → radius = 1", abs(radius-1.0) < 1e-7, f"r={radius:.6f}")
+
+    # 3 points forming equilateral triangle
+    pts = [(0,0),(1,0),(0.5, math.sqrt(3)/2)]
+    c_x, c_y, radius = solve_mec_megiddo(pts)
+    center = (c_x, c_y)
+    expected_r = 1/math.sqrt(3)
+    _check("equilateral triangle → all inside", _all_inside_skyum(pts, center, radius))
+    _check("equilateral triangle → circumradius",
+           abs(radius - expected_r) < 1e-6, f"r={radius:.6f} vs {expected_r:.6f}")
+
+    # 8 pts on circle r=5
+    angles = [i * 2*math.pi/8 for i in range(8)]
+    pts = [(5*math.cos(a), 5*math.sin(a)) for a in angles]
+    c_x, c_y, radius = solve_mec_megiddo(pts)
+    center = (c_x, c_y)
+    _check("8 pts on circle r=5 → all inside", _all_inside_skyum(pts, center, radius))
+    _check("8 pts on circle r=5 → radius≈5", abs(radius-5) < 1e-5, f"r={radius:.6f}")
+
+    # Large random set
+    random.seed(42)
+    pts = [(random.uniform(-100,100), random.uniform(-100,100)) for _ in range(500)]
+    c_x, c_y, radius = solve_mec_megiddo(pts)
+    center = (c_x, c_y)
+    _check("500 random pts → all inside", _all_inside_skyum(pts, center, radius))
+
 # 1.7 CORRECTNESS – MSW (N-Dimensional)
 # ─────────────────────────────────────────────────────────────────────────────
 def test_msw_correctness():
@@ -403,7 +462,7 @@ def plot_circles():
 
     fig, axes = plt.subplots(1, 3, figsize=(18, 6))
     fig.patch.set_facecolor(DARK)
-    fig.suptitle(f"Minimum Enclosing Circle — Welzl vs Approx (e={CFG['PLOT_EPS']}) vs Skyum",
+    fig.suptitle(f"Minimum Enclosing Circle — Welzl vs Approx (e={CFG['PLOT_EPS']}) vs Skyum vs Megiddo",
                  color=WHITE, fontsize=14, fontweight="bold", y=1.02)
 
     for ax, (title, pts_np) in zip(axes, configs):
@@ -411,6 +470,8 @@ def plot_circles():
         cw, rw   = minimum_enclosing_circle(pts_list)
         ca, ra, coreset = meb_approximation(pts_np, eps=CFG["PLOT_EPS"])
         cs, rs   = skyum_algo(pts_list)
+        cx_m, cy_m, rm = solve_mec_megiddo(pts_list)
+        cm = (cx_m, cy_m)
 
         ax.set_facecolor(PANEL)
         ax.scatter(pts_np[:,0], pts_np[:,1], color=WHITE,  s=18, alpha=0.7, zorder=3)
@@ -420,12 +481,15 @@ def plot_circles():
         circ_exact  = plt.Circle(cw, rw, color=TEAL,  fill=False, lw=2,   linestyle="-",  label=f"Welzl r={rw:.2f}")
         circ_approx = plt.Circle(ca, ra, color=PINK,  fill=False, lw=2,   linestyle="--", label=f"Approx r={ra:.2f}")
         circ_skyum  = plt.Circle(cs, rs, color=LIME,  fill=False, lw=2,   linestyle=":",  label=f"Skyum r={rs:.2f}")
+        circ_megiddo = plt.Circle(cm, rm, color=ACCENT, fill=False, lw=2, linestyle="-.", label=f"Megiddo r={rm:.2f}")
         ax.add_patch(circ_exact)
         ax.add_patch(circ_approx)
         ax.add_patch(circ_skyum)
+        ax.add_patch(circ_megiddo)
         ax.plot(*cw, "x", color=TEAL, ms=10, mew=2)
         ax.plot(*ca, "+", color=PINK, ms=10, mew=2)
         ax.plot(*cs, "*", color=LIME, ms=10, mew=2)
+        ax.plot(*cm, "d", color=ACCENT, ms=10, mew=2)
 
         ax.set_aspect("equal")
         ax.set_title(title, color=WHITE, fontsize=10)
@@ -515,6 +579,46 @@ def bench_skyum_vs_n():
 # ─────────────────────────────────────────────────────────────────────────────
 # 5. TIMING — Approx vs n  (2-D)
 # ─────────────────────────────────────────────────────────────────────────────
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 4.7 TIMING — Megiddo vs n
+# ─────────────────────────────────────────────────────────────────────────────
+def bench_megiddo_vs_n():
+    _section("Timing: Megiddo vs n  (2-D)")
+    sizes   = CFG["MEGIDDO_SIZES"]
+    repeats = CFG["MEGIDDO_REPEATS"]
+    times   = []
+
+    for n in sizes:
+        t_total = 0
+        for _ in range(repeats):
+            random.seed(random.randint(0, 10**6))
+            pts = [(random.uniform(-100,100), random.uniform(-100,100)) for _ in range(n)]
+            t0  = time.perf_counter()
+            solve_mec_megiddo(pts)
+            t_total += time.perf_counter() - t0
+        avg = t_total / repeats
+        times.append(avg)
+        print(f"    n={n:5d}  avg={avg*1000:.3f} ms")
+
+    fig, ax = plt.subplots(figsize=(9,5))
+    _style(fig, [ax])
+    ax.plot(sizes, [t*1000 for t in times], color=ACCENT, lw=2.5, marker="p",
+            markersize=6, markerfacecolor=DARK)
+    ax.fill_between(sizes, [t*1000 for t in times], alpha=0.12, color=ACCENT)
+    ax.set_xlabel("Number of Points (n)")
+    ax.set_ylabel("Time (ms)")
+    ax.set_title("Megiddo MEC — Runtime vs n")
+    plt.tight_layout()
+    out = f"{IMG}/megiddo_timing_vs_n.png"
+    plt.savefig(out, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"  Saved {out}")
+    return sizes, times
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 5. TIMING — Approx vs n  (2-D)
+# ─────────────────────────────────────────────────────────────────────────────
 def bench_approx_vs_n():
     EPS = CFG["APPROX_N_EPS"]
     _section(f"Timing: Approx vs n  (2-D, e={EPS})")
@@ -526,7 +630,7 @@ def bench_approx_vs_n():
         t_total = 0
         for s in range(repeats):
             np.random.seed(s)
-            pts = np.random.randn(n, 2)
+            pts = np.random.randn(n, 2) if n > 0 else np.empty((0, 2))
             t0  = time.perf_counter()
             meb_approximation(pts, EPS)
             t_total += time.perf_counter() - t0
@@ -730,36 +834,39 @@ def bench_msw_vs_approx_dim():
 # ─────────────────────────────────────────────────────────────────────────────
 def bench_comparison():
     EPS = CFG["CMP_EPS"]
-    _section(f"Comparison: Welzl vs Approx vs Skyum vs MSW  (2-D, e={EPS})")
+    _section(f"Comparison: All Algorithms  (2-D, e={EPS})")
     sizes   = CFG["CMP_SIZES"]
     repeats = CFG["CMP_REPEATS"]
-    t_welzl, t_approx, t_skyum, t_msw = [], [], [], []
+    t_welzl, t_approx, t_skyum, t_megiddo, t_msw = [], [], [], [], []
 
     for n in sizes:
-        tw, ta, ts, tm = 0, 0, 0, 0
+        tw, ta, ts, tmeg, tm = 0, 0, 0, 0, 0
         for s in range(repeats):
             random.seed(s); np.random.seed(s)
             pts_list = [(random.uniform(-50,50), random.uniform(-50,50)) for _ in range(n)]
-            pts_np   = np.array(pts_list)
+            pts_np   = np.array(pts_list).reshape(-1, 2)
 
             t0 = time.perf_counter(); minimum_enclosing_circle(pts_list);                               tw += time.perf_counter()-t0
             t0 = time.perf_counter(); meb_approximation(pts_np, EPS);                                  ta += time.perf_counter()-t0
             t0 = time.perf_counter(); skyum_algo(pts_list);                                            ts += time.perf_counter()-t0
+            t0 = time.perf_counter(); solve_mec_megiddo(pts_list);                                     tmeg += time.perf_counter()-t0
             t0 = time.perf_counter(); msw_minimum_enclosing_ball(pts_list, dim=2); tm += time.perf_counter()-t0
 
         t_welzl.append(tw/repeats); t_approx.append(ta/repeats)
-        t_skyum.append(ts/repeats); t_msw.append(tm/repeats)
-        print(f"    n={n:5d}  Welzl={tw/repeats*1000:.2f}ms  Approx={ta/repeats*1000:.2f}ms  Skyum={ts/repeats*1000:.2f}ms  MSW={tm/repeats*1000:.2f}ms")
+        t_skyum.append(ts/repeats); t_megiddo.append(tmeg/repeats); t_msw.append(tm/repeats)
+        print(f"    n={n:5d}  Welzl={tw/repeats*1000:.2f}  Approx={ta/repeats*1000:.2f}  Skyum={ts/repeats*1000:.2f}  Megiddo={tmeg/repeats*1000:.2f}  MSW={tm/repeats*1000:.2f} (ms)")
 
     fig, ax = plt.subplots(figsize=(11,5))
     _style(fig, [ax])
     ax.plot(sizes, [t*1000 for t in t_welzl],  color=TEAL,  lw=2.5, marker="o", markersize=6, markerfacecolor=DARK, label="Welzl (exact, 2D)")
     ax.plot(sizes, [t*1000 for t in t_approx], color=PINK,  lw=2.5, marker="s", markersize=6, markerfacecolor=DARK, label=f"Approx (e={EPS})")
     ax.plot(sizes, [t*1000 for t in t_skyum],  color=LIME,  lw=2.5, marker="D", markersize=6, markerfacecolor=DARK, label="Skyum (exact, 2D)")
+    ax.plot(sizes, [t*1000 for t in t_megiddo], color=ACCENT, lw=2.5, marker="p", markersize=6, markerfacecolor=DARK, label="Megiddo (exact, 2D)")
     ax.plot(sizes, [t*1000 for t in t_msw],    color=GOLD,  lw=2.5, marker="^", markersize=6, markerfacecolor=DARK, label="MSW (exact, N-D)")
     ax.fill_between(sizes, [t*1000 for t in t_welzl],  alpha=0.08, color=TEAL)
     ax.fill_between(sizes, [t*1000 for t in t_approx], alpha=0.08, color=PINK)
     ax.fill_between(sizes, [t*1000 for t in t_skyum],  alpha=0.08, color=LIME)
+    ax.fill_between(sizes, [t*1000 for t in t_megiddo], alpha=0.08, color=ACCENT)
     ax.fill_between(sizes, [t*1000 for t in t_msw],    alpha=0.08, color=GOLD)
     ax.set_xlabel("Number of Points (n)")
     ax.set_ylabel("Time (ms)")
@@ -790,19 +897,100 @@ def print_summary():
 # ─────────────────────────────────────────────────────────────────────────────
 # MAIN
 # ─────────────────────────────────────────────────────────────────────────────
+def bench_brute_force_small_n():
+    _section("Timing & Space: Brute Force vs All (Up to 10,000)")
+    sizes = [100, 500, 1000, 2500, 5000, 10000]
+    repeats = 1
+    algos = ["Welzl", "Skyum", "MSW", "Approx", "Megiddo", "Brute Force"]
+    times = {a: [] for a in algos}
+    memory = {a: [] for a in algos}
+
+    for n in sizes:
+        print(f"  n = {n}")
+        for algo in algos:
+            t_total = 0
+            mem_total = 0
+            
+            # Skip Brute force for massive datasets to prevent hours-long hangs
+            if algo == "Brute Force" and n > 1500:
+                print(f"    {algo:<12}: SKIPPED (O(n^3) would take hours)")
+                times[algo].append(np.nan)
+                memory[algo].append(np.nan)
+                continue
+                
+            for s in range(repeats):
+                np.random.seed(s)
+                pts_np = np.random.randn(n, 2) * 20
+                pts_list = [tuple(p) for p in pts_np]
+                
+                tracemalloc.start()
+                t0 = time.perf_counter()
+                
+                if algo == "Welzl":
+                    minimum_enclosing_circle(pts_list)
+                elif algo == "Skyum":
+                    skyum_algo(pts_list)
+                elif algo == "MSW":
+                    msw_minimum_enclosing_ball(pts_list)
+                elif algo == "Approx":
+                    meb_approximation(pts_np, 0.05)
+                elif algo == "Megiddo":
+                    solve_mec_megiddo(pts_np)
+                elif algo == "Brute Force":
+                    _brute_force_mec(pts_np)
+                    
+                t_total += time.perf_counter() - t0
+                _, peak = tracemalloc.get_traced_memory()
+                tracemalloc.stop()
+                mem_total += peak
+                
+            times[algo].append((t_total / repeats) * 1000)
+            memory[algo].append((mem_total / repeats) / 1024)
+            print(f"    {algo:<12}: {times[algo][-1]:.3f} ms, {memory[algo][-1]:.1f} KB")
+
+    # Plot Time
+    fig, ax = plt.subplots(figsize=(9, 5))
+    _style(fig, [ax])
+    for algo in algos:
+        ax.plot(sizes, times[algo], lw=2, marker="o", label=algo)
+    ax.set_xlabel("Number of Points (n)")
+    ax.set_ylabel("Time (ms)")
+    ax.set_yscale("log")
+    ax.set_title("Time: Brute Force vs All")
+    ax.legend(loc="upper left")
+    plt.tight_layout()
+    plt.savefig(f"{IMG}/bench_bruteforce_time.png", dpi=150, bbox_inches="tight")
+    plt.close()
+
+    # Plot Space
+    fig, ax = plt.subplots(figsize=(9, 5))
+    _style(fig, [ax])
+    for algo in algos:
+        ax.plot(sizes, memory[algo], lw=2, marker="s", label=algo)
+    ax.set_xlabel("Number of Points (n)")
+    ax.set_ylabel("Peak Memory (KB)")
+    ax.set_title("Memory: Brute Force vs All")
+    ax.legend(loc="upper left")
+    plt.tight_layout()
+    plt.savefig(f"{IMG}/bench_bruteforce_memory.png", dpi=150, bbox_inches="tight")
+    plt.close()
+
 if __name__ == "__main__":
     test_welzl_correctness()
     test_skyum_correctness()
+    test_megiddo_correctness()
     test_approx_correctness()
     test_msw_correctness()
     plot_circles()
     bench_welzl_vs_n()
     bench_skyum_vs_n()
+    bench_megiddo_vs_n()
     bench_approx_vs_n()
     bench_approx_vs_dim()
     bench_approx_vs_eps()
     bench_msw_vs_n()
     bench_msw_vs_approx_dim()
     bench_comparison()
+    bench_brute_force_small_n()
     print_summary()
     print(f"\n  All images saved to  ./{IMG}/\n")

@@ -14,9 +14,11 @@ performs better despite having an o(nlogn) time complexity. this is because
 the constant factors for welzl are much higher than that of skyum. and sorting in skyum
 is a very fast operation.
 
-3. The approximate algorithm has a fairly high time complexity of O(nd/epsilon) but since
-the factor of n comes from distance calculation, it is the fastest in practice for really high n.
+3. The approximate algorithm has a fairly high  worst case time complexity of O(nd/epsilon) but since
+the factor of n comes from distance calculation (a really cheap operation), it is the fastest in practice for really high n.
 also it almost never reaches the worst case time complexity.
 
-4. new: MSW or HighDwelzl implemented by Shahzaib is a bit faster in practice than Hamnas algo. It is similar to welzl but
+4. new: MSW or HighDwelzl implemented by Shahzaib is a bit faster in practice than Hamnas algo. It is similar to welzl but has been changed such that it is slightly faster and 
 can also be applied to higher dimensions. however it is not as good as approx for higher dimensions. 
+
+5. Megiddo is the worst performing algo. while its expected time is also o(n), in practice, it has a very high constant factor making it 20x slower than the rest. 
